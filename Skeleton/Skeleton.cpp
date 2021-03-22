@@ -18,8 +18,8 @@
 //
 // NYILATKOZAT
 // ---------------------------------------------------------------------------------------------
-// Nev    : 
-// Neptun : 
+// Nev    : Hegedus Andras
+// Neptun : BCFU8E
 // ---------------------------------------------------------------------------------------------
 // ezennel kijelentem, hogy a feladatot magam keszitettem, es ha barmilyen segitseget igenybe vettem vagy
 // mas szellemi termeket felhasznaltam, akkor a forrast es az atvett reszt kommentekben egyertelmuen jeloltem.
@@ -116,6 +116,7 @@ vec3 hypertranslate(vec3 coord, vec3 mirrora, vec3 mirrorb) {
 		return coord;
 }
 
+
 class Node {
 	vec3 coord;
 	vec3 newcoord;
@@ -196,6 +197,8 @@ public:
 		lines[i].getEnd().setCoord(lines[i].getNewEndCoord());*/
 
 class Line {
+	Node* startNode;
+	Node* endNode;
 	vec3 start;
 	vec3 end;
 	vec3 newstartcoord;
@@ -204,10 +207,10 @@ class Line {
 	unsigned int vao, vbo;
 public:
 	void setStart(vec3 newstart) {
-		start=newstart;
+		start = newstart;
 	}
 	void setEnd(vec3 newend) {
-		end=newend;
+		end = newend;
 	}
 	vec3 getNewStartCoord() {
 		return newstartcoord;
@@ -216,17 +219,19 @@ public:
 	{
 		return newendcoord;
 	}
-	void create(Node startnode, Node endnode) {
+	void create(Node *startnode, Node *endnode) {
 
-		start = startnode.getCoord();
-		end = endnode.getCoord();
-		newstartcoord=start;
-		newendcoord=end;
+		startNode = startnode;
+		endNode = endnode;
+		start = startnode->getCoord();
+		end = endnode->getCoord();
+		newstartcoord = start;
+		newendcoord = end;
 		glGenVertexArrays(1, &vao);
 		glBindVertexArray(vao);
 		glGenBuffers(1, &vbo);
 		glBindBuffer(GL_ARRAY_BUFFER, vbo);
-		vertices[0] = start/ start.z;
+		vertices[0] = start / start.z;
 		vertices[1] = end / end.z;
 		glEnableVertexAttribArray(0);  // attribute array 0
 		glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(vec3), reinterpret_cast<void*>(0));
@@ -247,8 +252,8 @@ public:
 	}
 
 	void redraw(vec3 cX, vec3 cY) {
-		start = hypertranslate(start, cX, cY);
-		end = hypertranslate(end, cX, cY);
+		start = startNode->getCoord();
+		end = endNode->getCoord();
 		glBindBuffer(GL_ARRAY_BUFFER, vbo);
 		vertices[0] = start / start.z;
 		vertices[1] = end / end.z;
@@ -260,6 +265,8 @@ public:
 			GL_STATIC_DRAW);
 	}
 };
+
+
 
 class Graph {
 	unsigned int vao, vbo;
@@ -286,6 +293,10 @@ unsigned int vao;	   // virtual world on the GPU
 Node node[50];
 std::vector<Line> lines;
 
+void generatebetterposition() {
+
+};
+
 
 // Initialization, create an OpenGL context
 void onInitialization() {
@@ -299,7 +310,7 @@ void onInitialization() {
 		{
 			if (rand() % 20 == 0&&i!=j) {
 				lines.push_back(Line());
-				lines.back().create(node[i], node[j]);
+				lines.back().create(&node[i], &node[j]);
 			}
 		}
 	}
@@ -324,6 +335,9 @@ void onDisplay() {
 // Key of ASCII code pressed
 void onKeyboard(unsigned char key, int pX, int pY) {
 	if (key == 'd') glutPostRedisplay();         // if d, invalidate display, i.e. redraw
+	if (key == ' ') {
+		glutPostRedisplay();
+	}
 }
 
 // Key of ASCII code released
