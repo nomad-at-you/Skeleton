@@ -123,14 +123,17 @@ class Node {
 	vec3 projection;
 	unsigned int vao, vbo;
 	vec3 vertices[nv];
+	Node* connected[50];
+	int connectedsum = 0;
+	vec3 forcevec;
 public:
 	void create() {
-		float coordxseed = (float)rand() / RAND_MAX*2-1;
-		float coordyseed = (float)rand() / RAND_MAX*2-1;
+		float coordxseed = (float)rand() / RAND_MAX * 2 - 1;
+		float coordyseed = (float)rand() / RAND_MAX * 2 - 1;
 		vec2 twodimcoord = vec2(coordxseed, coordyseed);
 		coord = tohyper(twodimcoord);
 		newcoord = coord;
-		projection = hypertodisk(vec2(coord.x,coord.y));
+		projection = hypertodisk(vec2(coord.x, coord.y));
 		glGenVertexArrays(1, &vao);
 		glBindVertexArray(vao);
 		glGenBuffers(1, &vbo);
@@ -148,16 +151,16 @@ public:
 			GL_STATIC_DRAW);
 
 	}
-	void draw(){
+	void draw() {
 		glBindVertexArray(vao);  // Draw call
 		gpuProgram.setUniform(vec3(0, 1, 0), "color");
 		glPointSize(10.0f);
 		glDrawArrays(GL_POINTS, 0 /*startIdx*/, 1 /*# Elements*/);
-		printf("%d",glGetError());
+		printf("%d", glGetError());
 	}
 
 	void redraw(vec3 cX, vec3 cY) {
- 		coord=hypertranslate(coord, cX, cY);
+		coord = hypertranslate(coord, cX, cY);
 		projection = hypertodisk(vec2(coord.x, coord.y));
 		glBindBuffer(GL_ARRAY_BUFFER, vbo);
 		/*for (int i = 0; i < nv; i++) {
@@ -191,6 +194,42 @@ public:
 	void setCoord(vec3 coords) {
 		coord = coords;
 	}
+
+	void addConnected(Node* node) {
+		connected[connectedsum] = node;
+		connectedsum++;
+	}
+
+	void calculateForce(Node *node) {
+		forcevec = vec3(0, 0, 0);
+		for (int i = 0; i < 50; i++) {
+
+			int j = 0;
+			for (j; j < connectedsum; j++)
+			{
+				if (&node[i] == connected[j])
+					printf("connected\n");
+				    float distance = hyperdistance(node[i].getCoord(), connected[j]->getCoord());
+				    forcevec = forcevec + hypervector(node[i].getCoord(), connected[j]->getCoord(), distance)
+						* (distance - 1) * (distance - 1) * (distance - 1);
+					break;
+
+			}
+			if(j==connectedsum)
+				printf("not connected\n");
+			if (this != &node[i]) {
+				float distance = hyperdistance(node[i].getCoord(), connected[j]->getCoord());
+				forcevec = forcevec + hypervector(node[i].getCoord(), connected[j]->getCoord(), distance)
+					* (-1/(distance-1));
+			}
+		}
+
+	}
+
+	vec3 getForce() {
+		return forcevec;
+	}
+	
 };
 
 /*		lines[i].getStart().setCoord(lines[i].getNewStartCoord());
@@ -293,9 +332,7 @@ unsigned int vao;	   // virtual world on the GPU
 Node node[50];
 std::vector<Line> lines;
 
-void generatebetterposition() {
 
-};
 
 
 // Initialization, create an OpenGL context
@@ -311,6 +348,8 @@ void onInitialization() {
 			if (rand() % 20 == 0&&i!=j) {
 				lines.push_back(Line());
 				lines.back().create(&node[i], &node[j]);
+				node[i].addConnected(&node[j]);
+				node[j].addConnected(&node[i]);
 			}
 		}
 	}
@@ -389,7 +428,10 @@ void onMouse(int button, int state, int pX, int pY) { // pX, pY are the pixel co
 // Idle event indicating that some time elapsed: do animation here
 void onIdle() {
 	long time = glutGet(GLUT_ELAPSED_TIME); // elapsed time since the start of the program
-	/*for (int i = 0; i < 50; i++)
-		node[i].redraw();
-	glutPostRedisplay();*/
+	/*for (int i = 0; i < 50; i++) {
+		node[i].calculateForce(node);
+
+	}*/
+		
+	glutPostRedisplay();
 }
