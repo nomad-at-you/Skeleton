@@ -40,9 +40,11 @@ const char * const vertexSource = R"(
 
 	uniform mat4 MVP;			// uniform variable, the Model-View-Projection transformation matrix
 	layout(location = 0) in vec2 vp;	// Varying input: vp = vertex position is expected in attrib array 0
-
-	void main() {
+    layout(location = 1) in vec2 texturevp;	// Varying input: vp = vertex position is expected in attrib array 0  
+	out vec2 textureout;
+    void main() {
 		gl_Position = vec4(vp.x, vp.y, 0, 1);		// transform vp from modeling space to normalized device space
+		textureout=texturevp;
 	}
 )";
 
@@ -51,16 +53,17 @@ const char * const fragmentSource = R"(
 	#version 330			// Shader 3.3
 	precision highp float;	// normal floats, makes no difference on desktop computers
 	
-	uniform vec3 color;		// uniform variable, the color of the primitive
+	in vec2 textureout;		// uniform variable, the color of the primitive
 	out vec4 outColor;		// computed color of the current pixel
+	uniform sampler2D sampler;
 
 	void main() {
-		outColor = vec4(color, 1);	// computed color is the color of the primitive
+		outColor = texture(sampler,textureout);	// computed color is the color of the primitive
 	}
 )";
 
 GPUProgram gpuProgram; // vertex and fragment shaders
-const int nv = 50;
+const int nv = 16;
 const float radius = 0.05;
 float mousestartX=-1;
 float mousestartY=-1;
@@ -89,11 +92,11 @@ vec3 circleprojectioncoord(vec3 coord, vec3 edgecoord)
 }
 
 float hyperdistance(vec3 a, vec3 b) {
-	return acoshf(-a.x * b.x - a.y * b.y + a.z * b.z);
+	return fmaxf(acoshf(-a.x * b.x - a.y * b.y + a.z * b.z),0.001);
 }
 
 vec3 hypervector(vec3 a, vec3 b, float d) {
-	return (b - a * coshf(d)) / sinhf(d);
+	return (b - a * coshf(d)) / fmaxf(sinhf(d),0.001);
 }
 
 vec3 hyperoffset(vec3 a, vec3 v, float d) {
@@ -110,12 +113,15 @@ vec3 hypertranslate(vec3 coord, vec3 mirrora, vec3 mirrorb) {
 		vec3 resultb = hyperoffset(resulta, vb, 2 * mirrorbd);
 		float mirrord = hyperdistance(coord, resultb);
 		vec3 vc = hypervector(coord, resultb, mirrord);
-		return hyperoffset(coord, vc, mirrord / 2);
+		vec3 result = hyperoffset(coord, vc, mirrord / 2);
+		return result;
 	}
 	else
 		return coord;
 }
 
+float distancemultiplier = 0.3;
+float idealdistance = 1;
 
 class Node {
 	vec3 coord;
@@ -125,7 +131,8 @@ class Node {
 	vec3 vertices[nv];
 	Node* connected[50];
 	int connectedsum = 0;
-	vec3 forcevec;
+	vec3 forcevec = vec3(0, 0, 0);
+	vec3 velocity = vec3(0, 0, 0);
 public:
 	void create() {
 		float coordxseed = (float)rand() / RAND_MAX * 2 - 1;
@@ -153,10 +160,8 @@ public:
 	}
 	void draw() {
 		glBindVertexArray(vao);  // Draw call
-		gpuProgram.setUniform(vec3(0, 1, 0), "color");
-		glPointSize(10.0f);
+		glPointSize(1.0f);
 		glDrawArrays(GL_POINTS, 0 /*startIdx*/, 1 /*# Elements*/);
-		printf("%d", glGetError());
 	}
 
 	void redraw(vec3 cX, vec3 cY) {
@@ -198,32 +203,58 @@ public:
 	void addConnected(Node* node) {
 		connected[connectedsum] = node;
 		connectedsum++;
+		printf("%d\n", connectedsum);
 	}
 
-	void calculateForce(Node *node) {
+	void calculateForce(std::vector<Node>& node) {
 		forcevec = vec3(0, 0, 0);
 		for (int i = 0; i < 50; i++) {
 
 			int j = 0;
 			for (j; j < connectedsum; j++)
 			{
-				if (&node[i] == connected[j])
-					printf("connected\n");
-				    float distance = hyperdistance(node[i].getCoord(), connected[j]->getCoord());
-				    forcevec = forcevec + hypervector(node[i].getCoord(), connected[j]->getCoord(), distance)
-						* (distance - 1) * (distance - 1) * (distance - 1);
+				if (&node[i]==connected[j]) {
+ 					float distance = hyperdistance(this->getCoord(), connected[j]->getCoord());
+					forcevec = forcevec + hypervector(this->getCoord(), connected[j]->getCoord(), distance) * (distance  - idealdistance) * (distance  - idealdistance) * (distance - idealdistance);
 					break;
+				}
 
 			}
-			if(j==connectedsum)
-				printf("not connected\n");
+			if (j == connectedsum)
 			if (this != &node[i]) {
-				float distance = hyperdistance(node[i].getCoord(), connected[j]->getCoord());
-				forcevec = forcevec + hypervector(node[i].getCoord(), connected[j]->getCoord(), distance)
-					* (-1/(distance-1));
+				float distance = hyperdistance(this->getCoord(), node[i].getCoord());
+				forcevec = forcevec + hypervector(this->getCoord(), node[i].getCoord(), distance)*((-1/distance * distancemultiplier * distancemultiplier * distancemultiplier));
 			}
 		}
+		float distance = hyperdistance(this->getCoord(), tohyper(vec2(0,0)));
+		forcevec = forcevec + hypervector(this->getCoord(), tohyper(vec2(0, 0)), distance)*0.5;
+		forcevec = forcevec * 0.01 - velocity;
+		/*
+		while (abs(forcevec.x) < 0.01 || abs(forcevec.y) < 0.01 || abs(forcevec.z < 0.01)) {
+			float a = ((float)rand() / (float)RAND_MAX * 2 - 1)/50;
+		    float b = ((float)rand() / (float)RAND_MAX * 2 - 1)/50;
+			forcevec = tohyper(vec2(a,b));
+		}*/
 
+	}
+
+	void forcedraw() {
+		velocity=velocity+forcevec*0.1f;
+		coord = coord + velocity;
+		coord = tohyper(vec2(coord.x, coord.y));
+		projection = hypertodisk(vec2(coord.x, coord.y));
+			glBindBuffer(GL_ARRAY_BUFFER, vbo);
+		/*for (int i = 0; i < nv; i++) {
+			float fi = i * 2 * M_PI / nv;
+			vec3 circle = tohyper(vec2(cosf(fi) * radius, sinf(fi) * radius) + twodimcoord);
+			vertices[i] = circleprojectioncoord(coord, circle);
+		}*/
+		glEnableVertexAttribArray(0);  // attribute array 0
+		glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(vec3), reinterpret_cast<void*>(0));
+		glBufferData(GL_ARRAY_BUFFER, 	// Copy to GPU target
+			sizeof(vec3),  // # bytes
+			&projection,	      	// address
+			GL_STATIC_DRAW);
 	}
 
 	vec3 getForce() {
@@ -283,14 +314,11 @@ public:
 	}
 	void draw() {
 		glBindVertexArray(vao);  // Draw call
-		gpuProgram.setUniform(vec3(0, 1, 0), "color");
 		glLineWidth(0.01f);
 		glDrawArrays(GL_LINES, 0 /*startIdx*/, 2 /*# Elements*/);
-		printf("line drawn\n");
-		printf("%d", glGetError());
 	}
 
-	void redraw(vec3 cX, vec3 cY) {
+	void redraw() {
 		start = startNode->getCoord();
 		end = endNode->getCoord();
 		glBindBuffer(GL_ARRAY_BUFFER, vbo);
@@ -305,7 +333,89 @@ public:
 	}
 };
 
+class Circle {
+	vec3 coord;
+	vec3 newcoord;
+	vec3 projection;
+	unsigned int vao, vbo[2];
+	vec3 vertices[nv];
+	vec2 texturecoords[nv];
+	Node* connected[50];
+	int connectedsum = 0;
+	vec3 forcevec;
+	Texture texture;
+public:
+	void create(vec4 colora, vec4 colorb) {
 
+		coord = tohyper(vec2(0, 0));
+		newcoord = coord;
+		projection = hypertodisk(vec2(coord.x, coord.y));
+		std::vector<vec4> textvec(128*128);
+		for (int i = 0; i < 128; i++)
+			for (int j = 0; j < 128;j++) {
+				textvec[i + j * 128] = colora * ((float)i / 128) + colorb * ((128 - (float)i) / 128);
+			textvec[i + j * 128].w = 1;
+		}
+		texture.create(128,128,textvec,GL_NEAREST);
+		glGenVertexArrays(1, &vao);
+		glBindVertexArray(vao);
+		glGenBuffers(2, &vbo[0]);
+		glBindBuffer(GL_ARRAY_BUFFER, vbo[0]);
+		for (int i = 0; i < nv; i++) {
+			float fi = i * 2 * M_PI / nv;
+			vertices[i] = hypertodisk(vec2(cosf(fi) * radius, sinf(fi) * radius));
+			texturecoords[i] = vec2(cosf(fi) * 0.5+0.5, sinf(fi) * 0.5 + 0.5);
+			
+		}
+			glEnableVertexAttribArray(0);  // attribute array 0
+			glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(vec3), reinterpret_cast<void*>(0));
+			glBufferData(GL_ARRAY_BUFFER, 	// Copy to GPU target
+				sizeof(vec3) * nv,  // # bytes
+				vertices,	      	// address
+				GL_STATIC_DRAW);
+			glBindBuffer(GL_ARRAY_BUFFER, vbo[1]);
+			glEnableVertexAttribArray(1);  // attribute array 0
+			glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(vec2), reinterpret_cast<void*>(0));
+			glBufferData(GL_ARRAY_BUFFER, 	// Copy to GPU target
+				sizeof(vec2) * nv,  // # bytes
+				texturecoords,	      	// address
+				GL_STATIC_DRAW);
+
+
+	}
+	void draw() {
+
+	}
+
+	void redraw(Node node) {
+		glBindBuffer(GL_ARRAY_BUFFER, vbo[0]);
+		for (int i = 0; i < nv; i++) {
+			float fi = i * 2 * M_PI / nv;
+			vertices[i] = hypertodisk(vec2(cosf(fi) * radius, sinf(fi) * radius));
+			texturecoords[i] = vec2(cosf(fi) * 0.5 + 0.5, sinf(fi) * 0.5 + 0.5);
+
+		}
+		for (int i = 0; i < nv; i++) {
+
+			vertices[i] = disktohyper(vec2(vertices[i].x,vertices[i].y));
+			vertices[i] = hypertranslate(vertices[i],coord, node.getCoord());
+			vertices[i] = hypertodisk(vec2(vertices[i].x, vertices[i].y));
+		}
+
+
+		
+		glEnableVertexAttribArray(0);  // attribute array 0
+		glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(vec3), reinterpret_cast<void*>(0));
+		glBufferData(GL_ARRAY_BUFFER, 	// Copy to GPU target
+			sizeof(vec3) * nv,  // # bytes
+			vertices,	      	// address
+			GL_STATIC_DRAW);
+
+		glBindVertexArray(vao);  // Draw call
+		gpuProgram.setUniform(texture, "sampler");
+		glDrawArrays(GL_TRIANGLE_FAN, 0 /*startIdx*/, nv /*# Elements*/);
+	}
+};
 
 class Graph {
 	unsigned int vao, vbo;
@@ -329,10 +439,13 @@ public:
 
 
 unsigned int vao;	   // virtual world on the GPU
-Node node[50];
+std::vector<Node> node(50);
 std::vector<Line> lines;
-
-
+std::vector<Circle> circle(50);
+std::vector<vec3> oldcoords(50);
+std::vector<vec3> newcoords(50);
+float oldallforce;
+float newallforce;
 
 
 // Initialization, create an OpenGL context
@@ -353,8 +466,46 @@ void onInitialization() {
 			}
 		}
 	}
-
+	oldallforce = 10000000000000000000000.f;
+	for (int j = 0; j < 100; j++) {
+		for (int i = 0; i < 50; i++) {
+			float coordxseed = (float)rand() / RAND_MAX * 2 - 1;
+			float coordyseed = (float)rand() / RAND_MAX * 2 - 1;
+			vec2 twodimcoord = vec2(coordxseed, coordyseed);
+			vec3 randcoord = tohyper(twodimcoord);
+			node[i].setCoord(randcoord);
+		}
+		newallforce = 0;
+		rand();
+		for (int i = 0; i < 50; i++) {
+			newcoords[i] = node[i].getCoord();
+			node[i].calculateForce(node);
+			newallforce = newallforce + length(node[i].getForce());
+		}
+		printf("%f %f\n", oldallforce, newallforce);
+		if (newallforce < oldallforce) {
+			for (int i = 0; i < 50; i++)
+				oldcoords[i] = newcoords[i];
+			oldallforce = newallforce;
+		}
+	}
 	
+	vec4 colors[10] = { vec4(1, 0, 0, 1),vec4(0, 1, 0, 1), vec4(0, 0, 1, 1),
+	                   vec4(1, 1, 0, 1),vec4(1, 0, 1, 1), vec4(0, 1, 1, 1),
+	                   vec4(0.5, 0, 0.5, 1),vec4(0.5, 0.5, 0, 1),vec4(0, 0.5, 0.5, 1),vec4(0.5,0.5, 0.5, 1)};
+	int coloraid = 0;
+	int colorbid = 0;
+	for (int i = 0; i < 50; i++) {
+		if (colorbid == 10) {
+			coloraid++;
+			colorbid = coloraid;
+		}
+		vec4 colora = colors[coloraid];
+		vec4 colorb = colors[colorbid];
+		circle[i].create(colora,colorb);
+		colorbid++;
+	}
+
 
 
 	gpuProgram.create(vertexSource, fragmentSource, "outColor");
@@ -364,17 +515,37 @@ void onInitialization() {
 void onDisplay() {
 	glClearColor(0, 0, 0, 0);     // background color
 	glClear(GL_COLOR_BUFFER_BIT); // clear frame buffer
-	for (int i = 0; i < 50; i++)
+	for (int i = 0; i < 50; i++) 
 		node[i].draw();
-	for (int i = 0; i < lines.size(); i++)
+	for (int i = 0; i < lines.size(); i++) 
 		lines[i].draw();
+	for (int i = 0; i < 50; i++)
+		node[i].redraw(disktohyper(vec2(0, 0)), disktohyper(vec2(0, 0)));
+	for (int i = 0; i < lines.size(); i++)
+		lines[i].redraw();
+	for (int i = 0; i < 50; i++) {
+		circle[i].redraw(node[i]);
+	}
 	glutSwapBuffers(); // exchange buffers for double buffering
+
 }
 
 // Key of ASCII code pressed
 void onKeyboard(unsigned char key, int pX, int pY) {
 	if (key == 'd') glutPostRedisplay();         // if d, invalidate display, i.e. redraw
 	if (key == ' ') {
+			for (int i = 0; i < 50; i++) {
+				node[i].calculateForce(node);
+
+			}
+			for (int i = 0; i < 50; i++) {
+				node[i].forcedraw();
+			}
+		
+		for (int i = 0; i < lines.size(); i++)
+			lines[i].redraw();
+		for (int i = 0; i < 50; i++)
+			circle[i].redraw(node[i]);
 		glutPostRedisplay();
 	}
 }
@@ -398,7 +569,10 @@ void onMouseMotion(int pX, int pY) {	// pX, pY are the pixel coordinates of the 
 	for (int i = 0; i < 50; i++)
 		node[i].redraw(disktohyper(vec2(mousestartX,mousestartY)), disktohyper(vec2(cX, cY)));
 	for (int i = 0; i < lines.size(); i++)
-		lines[i].redraw(disktohyper(vec2(mousestartX, mousestartY)), disktohyper(vec2(cX, cY)));
+		lines[i].redraw();
+	for (int i = 0; i < 50; i++) {
+		circle[i].redraw(node[i]);
+	}
 	mouseclick = true;
 	mousestartX = cX;
 	mousestartY = cY;
@@ -428,10 +602,6 @@ void onMouse(int button, int state, int pX, int pY) { // pX, pY are the pixel co
 // Idle event indicating that some time elapsed: do animation here
 void onIdle() {
 	long time = glutGet(GLUT_ELAPSED_TIME); // elapsed time since the start of the program
-	/*for (int i = 0; i < 50; i++) {
-		node[i].calculateForce(node);
 
-	}*/
-		
 	glutPostRedisplay();
 }
