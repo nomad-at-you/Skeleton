@@ -34,7 +34,7 @@
 #include "framework.h"
 
 // vertex shader in GLSL: It is a Raw string (C++11) since it contains new line characters
-const char * const vertexSource = R"(
+const char* const vertexSource = R"(
 	#version 330				// Shader 3.3
 	precision highp float;		// normal floats, makes no difference on desktop computers
 
@@ -49,7 +49,7 @@ const char * const vertexSource = R"(
 )";
 
 // fragment shader in GLSL
-const char * const fragmentSource = R"(
+const char* const fragmentSource = R"(
 	#version 330			// Shader 3.3
 	precision highp float;	// normal floats, makes no difference on desktop computers
 	
@@ -65,17 +65,17 @@ const char * const fragmentSource = R"(
 GPUProgram gpuProgram; // vertex and fragment shaders
 const int nv = 16;
 const float radius = 0.05;
-float mousestartX=-1;
-float mousestartY=-1;
-bool mouseclick=false;
+float mousestartX = -1;
+float mousestartY = -1;
+bool mouseclick = false;
 
 vec3 hypertodisk(vec2 coord)
 {
-	return vec3(coord.x/ sqrt(coord.x * coord.x + coord.y * coord.y + 1), coord.y/ sqrt(coord.x * coord.x + coord.y * coord.y + 1), 1);
+	return vec3(coord.x / sqrt(coord.x * coord.x + coord.y * coord.y + 1), coord.y / sqrt(coord.x * coord.x + coord.y * coord.y + 1), 1);
 }
 
 vec3 disktohyper(vec2 coord) {
-	return vec3(coord.x, coord.y, 1) / sqrt(1- coord.x* coord.x- coord.y* coord.y);
+	return vec3(coord.x, coord.y, 1) / sqrt(1 - coord.x * coord.x - coord.y * coord.y);
 }
 
 vec3 tohyper(vec2 coord)
@@ -86,17 +86,17 @@ vec3 tohyper(vec2 coord)
 vec3 circleprojectioncoord(vec3 coord, vec3 edgecoord)
 {
 	float d = acoshf(-coord.x * edgecoord.x - coord.y * edgecoord.y + coord.z * edgecoord.z);
-	vec3 v = (edgecoord - coord * coshf(d))/sinhf(d);
+	vec3 v = (edgecoord - coord * coshf(d)) / sinhf(d);
 	vec3 result = coord * coshf(radius) + v * sinhf(radius);
 	return result / result.z;
 }
 
 float hyperdistance(vec3 a, vec3 b) {
-	return fmaxf(acoshf(-a.x * b.x - a.y * b.y + a.z * b.z),0.001);
+	return fmaxf(acoshf(-a.x * b.x - a.y * b.y + a.z * b.z), 0.001);
 }
 
 vec3 hypervector(vec3 a, vec3 b, float d) {
-	return (b - a * coshf(d)) / fmaxf(sinhf(d),0.001);
+	return (b - a * coshf(d)) / fmaxf(sinhf(d), 0.001);
 }
 
 vec3 hyperoffset(vec3 a, vec3 v, float d) {
@@ -120,7 +120,7 @@ vec3 hypertranslate(vec3 coord, vec3 mirrora, vec3 mirrorb) {
 		return coord;
 }
 
-float distancemultiplier = 0.3;
+float distancemultiplier = 0.4 * 0.4 * 0.4 * 0.4;
 float idealdistance = 0.5;
 
 class Node {
@@ -213,37 +213,37 @@ public:
 			int j = 0;
 			for (j; j < connectedsum; j++)
 			{
-				if (&node[i]==connected[j]) {
- 					float distance = hyperdistance(this->getCoord(), connected[j]->getCoord());
-					forcevec = forcevec + hypervector(this->getCoord(), connected[j]->getCoord(), distance) * (distance  - idealdistance) * (distance  - idealdistance) * (distance - idealdistance);
+				if (&node[i] == connected[j]) {
+					float distance = hyperdistance(this->getCoord(), connected[j]->getCoord());
+					forcevec = forcevec + hypervector(this->getCoord(), connected[j]->getCoord(), distance) * (3 * distance - idealdistance);
 					break;
 				}
 
 			}
 			if (j == connectedsum)
-			if (this != &node[i]) {
-				float distance = hyperdistance(this->getCoord(), node[i].getCoord());
-				forcevec = forcevec + hypervector(this->getCoord(), node[i].getCoord(), distance)*((-1/distance * distancemultiplier * distancemultiplier * distancemultiplier));
-			}
+				if (this != &node[i]) {
+					float distance = hyperdistance(this->getCoord(), node[i].getCoord());
+					forcevec = forcevec + hypervector(this->getCoord(), node[i].getCoord(), distance) * ((-1 / distance * distancemultiplier));
+				}
 		}
-		float distance = hyperdistance(this->getCoord(), tohyper(vec2(0,0)));
-		forcevec = forcevec + hypervector(this->getCoord(), tohyper(vec2(0, 0)), distance) * (distance - idealdistance/8);
-		forcevec = (forcevec * 0.01 - velocity)*15;
+		float distance = hyperdistance(this->getCoord(), tohyper(vec2(0, 0)));
+		forcevec = forcevec + hypervector(this->getCoord(), tohyper(vec2(0, 0)), distance) * (distance - idealdistance);
+		forcevec = (forcevec * 0.01 - velocity / 8) * 15;
 		/*
 		while (abs(forcevec.x) < 0.01 || abs(forcevec.y) < 0.01 || abs(forcevec.z < 0.01)) {
 			float a = ((float)rand() / (float)RAND_MAX * 2 - 1)/50;
-		    float b = ((float)rand() / (float)RAND_MAX * 2 - 1)/50;
+			float b = ((float)rand() / (float)RAND_MAX * 2 - 1)/50;
 			forcevec = tohyper(vec2(a,b));
 		}*/
 
 	}
 
-	void forcedraw() {
-		velocity=velocity+forcevec*0.1f;
-		coord = coord + velocity;
+	void forcedraw(float dt) {
+		velocity = velocity + forcevec * 0.1f * dt * 400;
+		coord = coord + velocity * dt * 400;
 		coord = tohyper(vec2(coord.x, coord.y));
 		projection = hypertodisk(vec2(coord.x, coord.y));
-			glBindBuffer(GL_ARRAY_BUFFER, vbo);
+		glBindBuffer(GL_ARRAY_BUFFER, vbo);
 		/*for (int i = 0; i < nv; i++) {
 			float fi = i * 2 * M_PI / nv;
 			vec3 circle = tohyper(vec2(cosf(fi) * radius, sinf(fi) * radius) + twodimcoord);
@@ -260,7 +260,25 @@ public:
 	vec3 getForce() {
 		return forcevec;
 	}
-	
+
+	void setForce(vec3 force) {
+		forcevec = force;
+	}
+
+	int getConnectedSum() {
+		return connectedsum;
+	}
+
+	bool isConnected(Node* node) {
+		for (int i = 0; i < connectedsum; i++)
+			if (connected[i] == node) return true;
+		return false;
+	}
+
+	Node** getConnected() {
+		return connected;
+	}
+
 };
 
 /*		lines[i].getStart().setCoord(lines[i].getNewStartCoord());
@@ -289,7 +307,7 @@ public:
 	{
 		return endNode->getCoord();
 	}
-	void create(Node *startnode, Node *endnode) {
+	void create(Node* startnode, Node* endnode) {
 
 		startNode = startnode;
 		endNode = endnode;
@@ -338,7 +356,7 @@ int orientation(vec3 p1, vec3 p2, vec3 p3)
 	// See 10th slides from following link for derivation
 	// of the formula
 	float val = (p2.y - p1.y) * (p3.x - p2.x) -
-		(p2.x - p1.x) * (p3.y - p2.y)*1000;
+		(p2.x - p1.x) * (p3.y - p2.y) * 1000;
 	if (val == 0) return 0;  // colinear
 
 	return (val > 0) ? 1 : 2; // clock or counterclock wise
@@ -378,13 +396,13 @@ public:
 		coord = tohyper(vec2(0, 0));
 		newcoord = coord;
 		projection = hypertodisk(vec2(coord.x, coord.y));
-		std::vector<vec4> textvec(128*128);
+		std::vector<vec4> textvec(128 * 128);
 		for (int i = 0; i < 128; i++)
-			for (int j = 0; j < 128;j++) {
+			for (int j = 0; j < 128; j++) {
 				textvec[i + j * 128] = colora * ((float)i / 128) + colorb * ((128 - (float)i) / 128);
-			textvec[i + j * 128].w = 1;
-		}
-		texture.create(128,128,textvec,GL_NEAREST);
+				textvec[i + j * 128].w = 1;
+			}
+		texture.create(128, 128, textvec, GL_NEAREST);
 		glGenVertexArrays(1, &vao);
 		glBindVertexArray(vao);
 		glGenBuffers(2, &vbo[0]);
@@ -392,22 +410,22 @@ public:
 		for (int i = 0; i < nv; i++) {
 			float fi = i * 2 * M_PI / nv;
 			vertices[i] = hypertodisk(vec2(cosf(fi) * radius, sinf(fi) * radius));
-			texturecoords[i] = vec2(cosf(fi) * 0.5+0.5, sinf(fi) * 0.5 + 0.5);
-			
+			texturecoords[i] = vec2(cosf(fi) * 0.5 + 0.5, sinf(fi) * 0.5 + 0.5);
+
 		}
-			glEnableVertexAttribArray(0);  // attribute array 0
-			glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(vec3), reinterpret_cast<void*>(0));
-			glBufferData(GL_ARRAY_BUFFER, 	// Copy to GPU target
-				sizeof(vec3) * nv,  // # bytes
-				vertices,	      	// address
-				GL_STATIC_DRAW);
-			glBindBuffer(GL_ARRAY_BUFFER, vbo[1]);
-			glEnableVertexAttribArray(1);  // attribute array 0
-			glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(vec2), reinterpret_cast<void*>(0));
-			glBufferData(GL_ARRAY_BUFFER, 	// Copy to GPU target
-				sizeof(vec2) * nv,  // # bytes
-				texturecoords,	      	// address
-				GL_STATIC_DRAW);
+		glEnableVertexAttribArray(0);  // attribute array 0
+		glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(vec3), reinterpret_cast<void*>(0));
+		glBufferData(GL_ARRAY_BUFFER, 	// Copy to GPU target
+			sizeof(vec3) * nv,  // # bytes
+			vertices,	      	// address
+			GL_STATIC_DRAW);
+		glBindBuffer(GL_ARRAY_BUFFER, vbo[1]);
+		glEnableVertexAttribArray(1);  // attribute array 0
+		glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(vec2), reinterpret_cast<void*>(0));
+		glBufferData(GL_ARRAY_BUFFER, 	// Copy to GPU target
+			sizeof(vec2) * nv,  // # bytes
+			texturecoords,	      	// address
+			GL_STATIC_DRAW);
 
 
 	}
@@ -419,14 +437,14 @@ public:
 		glBindBuffer(GL_ARRAY_BUFFER, vbo[0]);
 		for (int i = 0; i < nv; i++) {
 
-			vertices[i] = disktohyper(vec2(vertices[i].x,vertices[i].y));
-			vertices[i] = hypertranslate(vertices[i],coord, node.getCoord());
+			vertices[i] = disktohyper(vec2(vertices[i].x, vertices[i].y));
+			vertices[i] = hypertranslate(vertices[i], coord, node.getCoord());
 			vertices[i] = hypertodisk(vec2(vertices[i].x, vertices[i].y));
 		}
 		coord = node.getCoord();
 
 
-		
+
 		glEnableVertexAttribArray(0);  // attribute array 0
 		glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(vec3), reinterpret_cast<void*>(0));
 		glBufferData(GL_ARRAY_BUFFER, 	// Copy to GPU target
@@ -448,7 +466,7 @@ public:
 	Graph() {
 		glGenVertexArrays(1, &vao);
 		glBindVertexArray(vao);
-		glGenBuffers(1, &vbo); 
+		glGenBuffers(1, &vbo);
 		glBindBuffer(GL_ARRAY_BUFFER, vbo);
 
 		glEnableVertexAttribArray(0);  // attribute array 0
@@ -478,6 +496,7 @@ Node aa, ab, ba, bb;
 // Initialization, create an OpenGL context
 void onInitialization() {
 	glViewport(0, 0, windowWidth, windowHeight);
+	int maxconnected = 0;
 	for (int i = 0; i < 50; i++) {
 		node[i].create();
 	}
@@ -492,10 +511,72 @@ void onInitialization() {
 				lines.back().create(&node[i], &node[j]);
 				node[i].addConnected(&node[j]);
 				node[j].addConnected(&node[i]);
+				if (maxconnected < node[i].getConnectedSum()) {
+					maxconnected = node[i].getConnectedSum();
+
+				}
 			}
 		}
 	}
-	oldallforce = 10000000000000000000000.f;
+
+
+	for (int i = 0; i < 2; i++) {
+		vec2 newxy[50] = { vec2(0, 0) };
+		for (int j = 0; j < 50; j++) {
+			for (int k = 0; k < 50; k++) {
+				if (j != k) {
+					if (node[j].isConnected(&node[k])) {
+						newxy[j].x += node[k].getCoord().x*100/(node[j].getConnectedSum()+1);
+						newxy[j].y += node[k].getCoord().y*100/ (node[j].getConnectedSum() + 1);
+					}
+					else {
+						newxy[j].x -= node[k].getCoord().x*5/ (node[j].getConnectedSum() + 1);
+						newxy[j].y -= node[k].getCoord().y*5/ (node[j].getConnectedSum() + 1);
+					}
+				}
+			}
+			newxy[j].x -= node[j].getCoord().x *10/ (node[j].getConnectedSum() + 1);
+			newxy[j].y -= node[j].getCoord().y *10/ (node[j].getConnectedSum() + 1);
+			newxy[j] = newxy[j] / 50;
+		}
+		for (int j = 0; j < 50; j++)
+			node[j].setCoord(tohyper(newxy[j]));
+	}
+	
+
+	/*for (int i = 0; i < 50; i++) {
+		node[i].setCoord(vec3(0, 0, 1));
+	}
+	printf("%d", maxconnected);
+	for (int i = maxconnected; i >= 0; i--) {
+		int sameconnected = 0;
+		float sameradius = 0.01/(float)(i+1)*(float)(maxconnected+1);
+		for (int j = 0; j < 50; j++) {
+			if (i == node[j].getConnectedSum())
+				sameconnected++;
+		}
+		int k = 0;
+		for (int j = 0; j < 50; j++) {
+			if (i == node[j].getConnectedSum()) {
+					float fi = (float)k * 2 * M_PI / (float)sameconnected;
+					node[j].setCoord(tohyper(vec2(cosf(fi) * sameradius, sinf(fi) * sameradius)));
+					printf("point set\n");
+					k++;
+
+			}
+		}
+		printf("done\n");
+	}
+	for (int i = 0; i < 50; i++) {
+		for (int j = 0; j < node[i].getConnectedSum(); j++) {
+			float fi = (float)j * 2 * M_PI / (float)node[i].getConnectedSum();
+			if (node[i].getConnectedSum() > node[i].getConnected()[j]->getConnectedSum()) {
+				node[i].getConnected()[j]->setCoord(tohyper(vec2(node[i].getCoord().x+cosf(fi) * 0.5, node[i].getCoord().y + sinf(fi) * 0.5)));
+			}
+		}
+	}*/
+
+	/*oldallforce = 10000000000000000000000.f;
 	for (int i = 0; i < 10000; i++) {
 		for (int j = 0; j < 50; j++) {
 			float coordxseed = (float)rand() / RAND_MAX * 2 - 1;
@@ -528,7 +609,7 @@ void onInitialization() {
 			oldallforce = newallforce;
 		}
 	}
-	
+
 	for (int i = 0; i < 50; i++)
 		node[i].setCoord(oldcoords[i]);
 
@@ -545,11 +626,11 @@ void onInitialization() {
 	}
 
 	printf("%f\n",newallforce);
+	*/
 
-	
 	vec4 colors[10] = { vec4(1, 0, 0, 1),vec4(0, 1, 0, 1), vec4(0, 0, 1, 1),
-	                   vec4(1, 1, 0, 1),vec4(1, 0, 1, 1), vec4(0, 1, 1, 1),
-	                   vec4(0.5, 0, 0.5, 1),vec4(0.5, 0.5, 0, 1),vec4(0, 0.5, 0.5, 1),vec4(0.5,0.5, 0.5, 1)};
+					   vec4(1, 1, 0, 1),vec4(1, 0, 1, 1), vec4(0, 1, 1, 1),
+					   vec4(0.5, 0, 0.5, 1),vec4(0.5, 0.5, 0, 1),vec4(0, 0.5, 0.5, 1),vec4(0.5,0.5, 0.5, 1) };
 	int coloraid = 0;
 	int colorbid = 0;
 	for (int i = 0; i < 50; i++) {
@@ -559,7 +640,7 @@ void onInitialization() {
 		}
 		vec4 colora = colors[coloraid];
 		vec4 colorb = colors[colorbid];
-		circle[i].create(colora,colorb);
+		circle[i].create(colora, colorb);
 		colorbid++;
 	}
 
@@ -572,10 +653,13 @@ void onInitialization() {
 void onDisplay() {
 	glClearColor(0, 0, 0, 0);     // background color
 	glClear(GL_COLOR_BUFFER_BIT); // clear frame buffer
-	for (int i = 0; i < 50; i++) 
+	for (int i = 0; i < 50; i++){
 		node[i].draw();
-	for (int i = 0; i < lines.size(); i++) 
+	}
+	for (int i = 0; i < lines.size(); i++)
 		lines[i].draw();
+	for (int i = 0; i < 50; i++)
+		node[i].redraw(disktohyper(vec2(0, 0)), disktohyper(vec2(0, 0)));
 	for (int i = 0; i < lines.size(); i++)
 		lines[i].redraw();
 	for (int i = 0; i < 50; i++)
@@ -613,7 +697,7 @@ void onMouseMotion(int pX, int pY) {	// pX, pY are the pixel coordinates of the 
 	}
 	printf("Mouse moved to (%3.2f, %3.2f)\n", cX, cY);
 	for (int i = 0; i < 50; i++)
-		node[i].redraw(disktohyper(vec2(mousestartX,mousestartY)), disktohyper(vec2(cX, cY)));
+		node[i].redraw(disktohyper(vec2(mousestartX, mousestartY)), disktohyper(vec2(cX, cY)));
 	for (int i = 0; i < lines.size(); i++)
 		lines[i].redraw();
 	for (int i = 0; i < 50; i++) {
@@ -632,7 +716,7 @@ void onMouse(int button, int state, int pX, int pY) { // pX, pY are the pixel co
 	float cY = 1.0f - 2.0f * pY / windowHeight;
 
 
-	char * buttonStat;
+	char* buttonStat;
 	switch (state) {
 	case GLUT_DOWN: buttonStat = "pressed"; break;
 	case GLUT_UP: 	mouseclick = false; buttonStat = "released"; break;
@@ -645,24 +729,33 @@ void onMouse(int button, int state, int pX, int pY) { // pX, pY are the pixel co
 	}
 }
 
+
+long oldtime;
 // Idle event indicating that some time elapsed: do animation here
 void onIdle() {
+	long time = glutGet(GLUT_ELAPSED_TIME); // elapsed time since the start of the program
+	float dt = (time - oldtime) / 1000.f;
+	oldtime = time;
 	if (physics) {
 		for (int i = 0; i < 50; i++) {
 			node[i].calculateForce(node);
 
 		}
+
 		for (int i = 0; i < 50; i++) {
-			node[i].forcedraw();
+			node[i].forcedraw(dt);
 		}
 
-		for (int i = 0; i < lines.size(); i++)
-			lines[i].redraw();
-		for (int i = 0; i < 50; i++)
-			circle[i].redraw(node[i]);
+		if (length(node[49].getForce()) < 0.00001)
+			physics = false;
 	}
-	long time = glutGet(GLUT_ELAPSED_TIME); // elapsed time since the start of the program
+
+
+	for (int i = 0; i < lines.size(); i++)
+		lines[i].redraw();
 	for (int i = 0; i < 50; i++)
 		circle[i].redraw(node[i]);
+
+
 	glutPostRedisplay();
 }
