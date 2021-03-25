@@ -121,7 +121,7 @@ vec3 hypertranslate(vec3 coord, vec3 mirrora, vec3 mirrorb) {
 }
 
 float distancemultiplier = 0.3;
-float idealdistance = 1;
+float idealdistance = 0.5;
 
 class Node {
 	vec3 coord;
@@ -227,8 +227,8 @@ public:
 			}
 		}
 		float distance = hyperdistance(this->getCoord(), tohyper(vec2(0,0)));
-		forcevec = forcevec + hypervector(this->getCoord(), tohyper(vec2(0, 0)), distance)*0.5;
-		forcevec = forcevec * 0.01 - velocity;
+		forcevec = forcevec + hypervector(this->getCoord(), tohyper(vec2(0, 0)), distance) * (distance - idealdistance/8);
+		forcevec = (forcevec * 0.01 - velocity)*15;
 		/*
 		while (abs(forcevec.x) < 0.01 || abs(forcevec.y) < 0.01 || abs(forcevec.z < 0.01)) {
 			float a = ((float)rand() / (float)RAND_MAX * 2 - 1)/50;
@@ -282,12 +282,12 @@ public:
 	void setEnd(vec3 newend) {
 		end = newend;
 	}
-	vec3 getNewStartCoord() {
-		return newstartcoord;
+	vec3 getStartCoord() {
+		return startNode->getCoord();
 	}
-	vec3 getNewEndCoord()
+	vec3 getEndCoord()
 	{
-		return newendcoord;
+		return endNode->getCoord();
 	}
 	void create(Node *startnode, Node *endnode) {
 
@@ -331,6 +331,34 @@ public:
 			vertices,	      	// address
 			GL_STATIC_DRAW);
 	}
+};
+
+int orientation(vec3 p1, vec3 p2, vec3 p3)
+{
+	// See 10th slides from following link for derivation
+	// of the formula
+	float val = (p2.y - p1.y) * (p3.x - p2.x) -
+		(p2.x - p1.x) * (p3.y - p2.y)*1000;
+	if (val == 0) return 0;  // colinear
+
+	return (val > 0) ? 1 : 2; // clock or counterclock wise
+}
+
+bool intersects(Line* a, Line* b) {
+	vec3 p1 = hypertodisk(vec2(a->getStartCoord().x, a->getStartCoord().y));
+	vec3 q1 = hypertodisk(vec2(a->getEndCoord().x, a->getEndCoord().y));
+	vec3 p2 = hypertodisk(vec2(b->getStartCoord().x, b->getStartCoord().y));
+	vec3 q2 = hypertodisk(vec2(b->getEndCoord().x, b->getEndCoord().y));
+	int o1 = orientation(p1, q1, p2);
+	int o2 = orientation(p1, q1, q2);
+	int o3 = orientation(p2, q2, p1);
+	int o4 = orientation(p2, q2, q1);
+
+	// General case
+	if (o1 != o2 && o3 != o4)
+		return true;
+	return false;
+
 };
 
 class Circle {
@@ -390,17 +418,12 @@ public:
 	void redraw(Node node) {
 		glBindBuffer(GL_ARRAY_BUFFER, vbo[0]);
 		for (int i = 0; i < nv; i++) {
-			float fi = i * 2 * M_PI / nv;
-			vertices[i] = hypertodisk(vec2(cosf(fi) * radius, sinf(fi) * radius));
-			texturecoords[i] = vec2(cosf(fi) * 0.5 + 0.5, sinf(fi) * 0.5 + 0.5);
-
-		}
-		for (int i = 0; i < nv; i++) {
 
 			vertices[i] = disktohyper(vec2(vertices[i].x,vertices[i].y));
 			vertices[i] = hypertranslate(vertices[i],coord, node.getCoord());
 			vertices[i] = hypertodisk(vec2(vertices[i].x, vertices[i].y));
 		}
+		coord = node.getCoord();
 
 
 		
@@ -446,6 +469,10 @@ std::vector<vec3> oldcoords(50);
 std::vector<vec3> newcoords(50);
 float oldallforce;
 float newallforce;
+bool init = true;
+
+Node aa, ab, ba, bb;
+
 
 
 // Initialization, create an OpenGL context
@@ -454,11 +481,13 @@ void onInitialization() {
 	for (int i = 0; i < 50; i++) {
 		node[i].create();
 	}
+	for (int j = 0; j < 50; j++)
+		newcoords[j] = node[j].getCoord();
 	for (int i = 0; i < 50; i++)
 	{
 		for (int j = i; j < 50; j++)
 		{
-			if (rand() % 20 == 0&&i!=j) {
+			if (rand() % 20 == 0 && i != j) {
 				lines.push_back(Line());
 				lines.back().create(&node[i], &node[j]);
 				node[i].addConnected(&node[j]);
@@ -467,28 +496,56 @@ void onInitialization() {
 		}
 	}
 	oldallforce = 10000000000000000000000.f;
-	for (int j = 0; j < 100; j++) {
-		for (int i = 0; i < 50; i++) {
+	for (int i = 0; i < 10000; i++) {
+		for (int j = 0; j < 50; j++) {
 			float coordxseed = (float)rand() / RAND_MAX * 2 - 1;
 			float coordyseed = (float)rand() / RAND_MAX * 2 - 1;
 			vec2 twodimcoord = vec2(coordxseed, coordyseed);
 			vec3 randcoord = tohyper(twodimcoord);
-			node[i].setCoord(randcoord);
+			node[j].setCoord(randcoord);
 		}
 		newallforce = 0;
-		rand();
-		for (int i = 0; i < 50; i++) {
-			newcoords[i] = node[i].getCoord();
-			node[i].calculateForce(node);
-			newallforce = newallforce + length(node[i].getForce());
-		}
+
+			for (int j = 0; j < lines.size(); j++)
+			{
+				for (int k = j; k < lines.size(); k++)
+				{
+					if (intersects(&lines[j], &lines[k]) && j != k) {
+						newallforce++;
+						if (newallforce > oldallforce)
+							break;
+					}
+				}
+				if (newallforce > oldallforce)
+					break;
+			}
+
+
 		printf("%f %f\n", oldallforce, newallforce);
 		if (newallforce < oldallforce) {
-			for (int i = 0; i < 50; i++)
-				oldcoords[i] = newcoords[i];
+			for (int j = 0; j < 50; j++)
+				oldcoords[j] = node[j].getCoord();
 			oldallforce = newallforce;
 		}
 	}
+	
+	for (int i = 0; i < 50; i++)
+		node[i].setCoord(oldcoords[i]);
+
+	newallforce = 0;
+	for (int j = 0; j < lines.size(); j++)
+	{
+		for (int k = j; k < lines.size(); k++)
+		{
+			if (intersects(&lines[j], &lines[k])&&j!=k) {
+				newallforce++;
+
+			}
+		}
+	}
+
+	printf("%f\n",newallforce);
+
 	
 	vec4 colors[10] = { vec4(1, 0, 0, 1),vec4(0, 1, 0, 1), vec4(0, 0, 1, 1),
 	                   vec4(1, 1, 0, 1),vec4(1, 0, 1, 1), vec4(0, 1, 1, 1),
@@ -519,33 +576,22 @@ void onDisplay() {
 		node[i].draw();
 	for (int i = 0; i < lines.size(); i++) 
 		lines[i].draw();
-	for (int i = 0; i < 50; i++)
-		node[i].redraw(disktohyper(vec2(0, 0)), disktohyper(vec2(0, 0)));
 	for (int i = 0; i < lines.size(); i++)
 		lines[i].redraw();
-	for (int i = 0; i < 50; i++) {
+	for (int i = 0; i < 50; i++)
 		circle[i].redraw(node[i]);
-	}
+
+
 	glutSwapBuffers(); // exchange buffers for double buffering
 
 }
 
+bool physics = false;
 // Key of ASCII code pressed
 void onKeyboard(unsigned char key, int pX, int pY) {
 	if (key == 'd') glutPostRedisplay();         // if d, invalidate display, i.e. redraw
 	if (key == ' ') {
-			for (int i = 0; i < 50; i++) {
-				node[i].calculateForce(node);
-
-			}
-			for (int i = 0; i < 50; i++) {
-				node[i].forcedraw();
-			}
-		
-		for (int i = 0; i < lines.size(); i++)
-			lines[i].redraw();
-		for (int i = 0; i < 50; i++)
-			circle[i].redraw(node[i]);
+		physics = !physics;
 		glutPostRedisplay();
 	}
 }
@@ -601,7 +647,22 @@ void onMouse(int button, int state, int pX, int pY) { // pX, pY are the pixel co
 
 // Idle event indicating that some time elapsed: do animation here
 void onIdle() {
-	long time = glutGet(GLUT_ELAPSED_TIME); // elapsed time since the start of the program
+	if (physics) {
+		for (int i = 0; i < 50; i++) {
+			node[i].calculateForce(node);
 
+		}
+		for (int i = 0; i < 50; i++) {
+			node[i].forcedraw();
+		}
+
+		for (int i = 0; i < lines.size(); i++)
+			lines[i].redraw();
+		for (int i = 0; i < 50; i++)
+			circle[i].redraw(node[i]);
+	}
+	long time = glutGet(GLUT_ELAPSED_TIME); // elapsed time since the start of the program
+	for (int i = 0; i < 50; i++)
+		circle[i].redraw(node[i]);
 	glutPostRedisplay();
 }
